@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuerySense — Multi-Agent SQL Optimizer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1117;
+    --surface2: #161b22;
+    --border: #21262d;
+    --text: #e6edf3;
+    --muted: #7d8590;
+    --orange: #f97316;
+    --orange-dim: rgba(249,115,22,0.12);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,0.12);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.12);
+    --gold: #eab308;
+    --gold-dim: rgba(234,179,8,0.12);
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,0.1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid noise texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(249,115,22,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(249,115,22,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+    background: rgba(8,12,16,0.9);
+    backdrop-filter: blur(12px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-mark {
+    width: 36px;
+    height: 36px;
+    background: var(--orange);
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .logo-text {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+  }
+
+  .logo-text span { color: var(--orange); }
+
+  .header-badge {
+    font-size: 10px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    padding: 60px 0 40px;
+    text-align: center;
+  }
+
+  .hero-eyebrow {
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--orange);
+    margin-bottom: 16px;
+  }
+
+  .hero-title {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(32px, 5vw, 56px);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -2px;
+    margin-bottom: 16px;
+  }
+
+  .hero-title .accent { color: var(--orange); }
+
+  .hero-sub {
+    font-size: 14px;
+    color: var(--muted);
+    max-width: 560px;
+    margin: 0 auto 40px;
+    line-height: 1.7;
+  }
+
+  /* ── Input Panel ── */
+  .input-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 48px;
+  }
+
+  .input-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .input-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .dialect-select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .dialect-select:focus { border-color: var(--orange); }
+
+  .demo-btns {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .demo-btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .demo-btn:hover {
+    border-color: var(--orange);
+    color: var(--orange);
+    background: var(--orange-dim);
+  }
+
+  .sql-textarea {
+    width: 100%;
+    min-height: 180px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 20px;
+    resize: vertical;
+    outline: none;
+  }
+
+  .sql-textarea::placeholder { color: var(--muted); }
+
+  .input-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  .char-count {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .race-btn {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 12px 32px;
+    background: var(--orange);
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .race-btn:hover:not(:disabled) {
+    background: #fb923c;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(249,115,22,0.3);
+  }
+
+  .race-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .race-btn .btn-icon { font-size: 16px; }
+
+  /* ── Status Bar ── */
+  .status-bar {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 32px;
+    font-size: 12px;
+  }
+
+  .status-bar.visible { display: flex; }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--orange);
+    animation: pulse 1s infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .status-msg { color: var(--muted); flex: 1; }
+  .status-timer { color: var(--orange); font-weight: 700; }
+
+  /* ── Race Grid ── */
+  .race-section { display: none; margin-bottom: 48px; }
+  .race-section.visible { display: block; }
+
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .agents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+  }
+
+  /* ── Agent Card ── */
+  .agent-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s;
+    position: relative;
+  }
+
+  .agent-card.active { border-color: var(--agent-color, var(--orange)); }
+  .agent-card.done { border-color: var(--agent-color, var(--orange)); }
+  .agent-card.winner { box-shadow: 0 0 0 2px var(--gold), 0 0 32px rgba(234,179,8,0.2); }
+
+  .agent-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--agent-color, var(--border));
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .agent-card.active::before,
+  .agent-card.done::before { opacity: 1; }
+
+  .card-header {
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .agent-name {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .agent-model {
+    font-size: 10px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  .card-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .position-badge {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: none;
+  }
+
+  .position-badge.first { background: var(--gold-dim); color: var(--gold); display: inline-block; }
+  .position-badge.second { background: rgba(156,163,175,0.1); color: #9ca3af; display: inline-block; }
+  .position-badge.third { background: rgba(180,83,9,0.1); color: #b45309; display: inline-block; }
+
+  .card-body { padding: 16px; }
+
+  .loading-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 12px;
+    display: none;
+  }
+
+  .agent-card.active .loading-bar { display: block; }
+
+  .loading-bar::after {
+    content: '';
+    display: block;
+    height: 100%;
+    width: 30%;
+    background: var(--agent-color, var(--orange));
+    border-radius: 2px;
+    animation: loading-sweep 1.5s ease-in-out infinite;
+  }
+
+  @keyframes loading-sweep {
+    0% { transform: translateX(-150%); }
+    100% { transform: translateX(450%); }
+  }
+
+  .card-placeholder {
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+    padding: 32px 0;
+  }
+
+  .card-placeholder .wait-icon { font-size: 32px; margin-bottom: 8px; }
+
+  /* Result sections inside cards */
+  .result-section { margin-bottom: 16px; }
+
+  .result-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .issues-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .issues-list li {
+    font-size: 11px;
+    color: var(--text);
+    padding: 6px 10px;
+    background: var(--surface2);
+    border-radius: 4px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    line-height: 1.4;
+  }
+
+  .issues-list li::before {
+    content: '→';
+    color: var(--agent-color, var(--orange));
+    flex-shrink: 0;
+  }
+
+  .severity-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .severity-critical { background: rgba(239,68,68,0.2); color: var(--red); }
+  .severity-high { background: rgba(249,115,22,0.2); color: var(--orange); }
+  .severity-medium { background: rgba(234,179,8,0.2); color: var(--gold); }
+  .severity-low { background: rgba(34,197,94,0.2); color: var(--green); }
+  .severity-unknown { background: var(--surface2); color: var(--muted); }
+
+  .stat-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .stat-chip {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .stat-chip .stat-val { color: var(--agent-color, var(--orange)); font-weight: 700; }
+
+  .sql-block {
+    position: relative;
+    background: var(--surface2);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .sql-block pre {
+    margin: 0;
+    padding: 12px;
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-x: auto;
+    max-height: 200px;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .copy-btn:hover { color: var(--text); border-color: var(--text); }
+  .copy-btn.copied { color: var(--green); border-color: var(--green); }
+
+  .elapsed-tag {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 8px;
+    text-align: right;
+  }
+
+  /* ── Judge Panel ── */
+  .judge-section {
+    display: none;
+    margin-bottom: 48px;
+  }
+
+  .judge-section.visible { display: block; }
+
+  .judge-panel {
+    background: var(--surface);
+    border: 1px solid var(--gold);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 0 40px rgba(234,179,8,0.1);
+    animation: judge-reveal 0.5s ease-out;
+  }
+
+  @keyframes judge-reveal {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .judge-header {
+    padding: 20px 24px;
+    background: var(--gold-dim);
+    border-bottom: 1px solid rgba(234,179,8,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .judge-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .winner-crown {
+    font-size: 24px;
+    animation: bounce 0.5s ease-out 0.3s both;
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+
+  .winner-label {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .winner-name {
+    color: var(--gold);
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .race-stats {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .race-stat {
+    text-align: center;
+  }
+
+  .race-stat-val {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--gold);
+  }
+
+  .race-stat-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .judge-body { padding: 24px; }
+
+  .verdict-text {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+    padding: 16px;
+    background: var(--surface2);
+    border-radius: 8px;
+    border-left: 3px solid var(--gold);
+    margin-bottom: 24px;
+  }
+
+  .scores-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .score-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+    transition: all 0.2s;
+  }
+
+  .score-card.winner-card {
+    border-color: var(--gold);
+    background: var(--gold-dim);
+  }
+
+  .score-agent {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+  }
+
+  .score-num {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 32px;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .score-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 8px 0;
+  }
+
+  .score-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.8s ease-out;
+  }
+
+  .score-comment {
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  .improvements-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .improvement-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .improvement-num {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    color: var(--gold);
+    font-size: 14px;
+    flex-shrink: 0;
+    min-width: 20px;
+  }
+
+  .final-sql-label {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .final-sql-label .trophy { color: var(--gold); }
+
+  .final-sql-block {
+    position: relative;
+    background: var(--bg);
+    border: 1px solid var(--gold);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .final-sql-block pre {
+    margin: 0;
+    padding: 20px;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+  }
+
+  .final-sql-block .copy-btn { background: var(--surface); }
+
+  .final-explanation {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-top: 12px;
+    padding: 0 4px;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .footer a { color: var(--orange); text-decoration: none; }
+  .footer strong { color: var(--text); }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    .scores-grid { grid-template-columns: 1fr; }
+    .agents-grid { grid-template-columns: 1fr; }
+    .header-badge { display: none; }
+    .demo-btns { display: none; }
+  }
+
+  /* ── Utility ── */
+  .hidden { display: none !important; }
+
+  pre code.hljs { background: transparent; padding: 0; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="container">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-mark">⚡</div>
+        <div class="logo-text">Query<span>Sense</span></div>
+      </div>
+      <div class="header-badge">2 Fast 2 MCP · Archestra.ai</div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="container">
+
+    <div class="hero">
+      <div class="hero-eyebrow">Multi-Agent SQL Optimization</div>
+      <h1 class="hero-title">3 Agents Race.<br><span class="accent">1 Query Wins.</span></h1>
+      <p class="hero-sub">Paste a SQL query. Three specialized MCP agents compete simultaneously — Performance, Cost, and Security. A Judge picks the winner and synthesizes the ultimate query.</p>
+    </div>
+
+    <!-- Input Panel -->
+    <div class="input-panel">
+      <div class="input-toolbar">
+        <div class="input-toolbar-left">
+          <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Dialect</span>
+          <select id="dialectSelect" class="dialect-select">
+            <option value="postgresql">PostgreSQL</option>
+            <option value="mysql">MySQL</option>
+            <option value="bigquery">BigQuery</option>
+            <option value="snowflake">Snowflake</option>
+            <option value="redshift">Redshift</option>
+            <option value="sqlite">SQLite</option>
+          </select>
+        </div>
+        <div class="demo-btns" id="demoBtns">
+          <button class="demo-btn" onclick="loadDemo(0)">N+1 Classic</button>
+          <button class="demo-btn" onclick="loadDemo(1)">SELECT * Monster</button>
+          <button class="demo-btn" onclick="loadDemo(2)">Missing Index</button>
+          <button class="demo-btn" onclick="loadDemo(3)">SQL Injection</button>
+          <button class="demo-btn" onclick="loadDemo(4)">Cost Killer</button>
+        </div>
+      </div>
+
+      <textarea
+        id="sqlInput"
+        class="sql-textarea"
+        placeholder="-- Paste your SQL query here, or load a demo query above&#10;SELECT * FROM orders WHERE user_id IN (SELECT id FROM users)..."
+        spellcheck="false"
+      ></textarea>
+
+      <div class="input-footer">
+        <span class="char-count" id="charCount">0 chars</span>
+        <button class="race-btn" id="raceBtn" onclick="startRace()">
+          <span class="btn-icon">🏁</span>
+          Start Race
+        </button>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar" id="statusBar">
+      <div class="status-dot"></div>
+      <div class="status-msg" id="statusMsg">Initializing agents...</div>
+      <div class="status-timer" id="statusTimer">0.0s</div>
+      <button onclick="resetRace()" style="font-family:inherit;font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:4px;cursor:pointer;">✕ Cancel</button>
+    </div>
+
+    <!-- Agent Race Grid -->
+    <div class="race-section" id="raceSection">
+      <div class="section-label">Agent Race</div>
+      <div class="agents-grid" id="agentsGrid">
+        <!-- Performance Agent -->
+        <div class="agent-card" id="card-performance" style="--agent-color: var(--orange)">
+          <div class="card-header">
+            <div class="agent-name">🚀 Performance Agent</div>
+            <div class="card-status">
+              <span class="agent-model">Llama 3.3</span>
+              <span class="position-badge" id="pos-performance"></span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="loading-bar"></div>
+            <div id="content-performance">
+              <div class="card-placeholder">
+                <div class="wait-icon">⏳</div>
+                <div>Waiting to race...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cost Agent -->
+        <div class="agent-card" id="card-cost" style="--agent-color: var(--blue)">
+          <div class="card-header">
+            <div class="agent-name">💰 Cost Agent</div>
+            <div class="card-status">
+              <span class="agent-model">Llama 3.3</span>
+              <span class="position-badge" id="pos-cost"></span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="loading-bar"></div>
+            <div id="content-cost">
+              <div class="card-placeholder">
+                <div class="wait-icon">⏳</div>
+                <div>Waiting to race...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Security Agent -->
+        <div class="agent-card" id="card-security" style="--agent-color: var(--red)">
+          <div class="card-header">
+            <div class="agent-name">🔒 Security Agent</div>
+            <div class="card-status">
+              <span class="agent-model">Llama 3.3</span>
+              <span class="position-badge" id="pos-security"></span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="loading-bar"></div>
+            <div id="content-security">
+              <div class="card-placeholder">
+                <div class="wait-icon">⏳</div>
+                <div>Waiting to race...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Judge Panel -->
+    <div class="judge-section" id="judgeSection">
+      <div class="section-label">Judge Verdict</div>
+      <div class="judge-panel" id="judgePanel">
+        <div class="judge-header">
+          <div class="judge-title">
+            <span class="winner-crown">🏆</span>
+            <div class="winner-label">
+              <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Winner</span>
+              <span class="winner-name" id="winnerName">—</span>
+            </div>
+          </div>
+          <div class="race-stats">
+            <div class="race-stat">
+              <div class="race-stat-val" id="statTime">—</div>
+              <div class="race-stat-label">Total Time</div>
+            </div>
+            <div class="race-stat">
+              <div class="race-stat-val" id="statCost">—</div>
+              <div class="race-stat-label">Total Cost</div>
+            </div>
+            <div class="race-stat">
+              <div class="race-stat-val" id="statHealth">—</div>
+              <div class="race-stat-label">Query Health</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="judge-body">
+          <!-- Verdict -->
+          <div class="result-section">
+            <div class="result-label">Judge's Verdict</div>
+            <div class="verdict-text" id="verdictText">—</div>
+          </div>
+
+          <!-- Scores -->
+          <div class="result-section">
+            <div class="result-label">Agent Scores</div>
+            <div class="scores-grid" id="scoresGrid">
+              <!-- Filled dynamically -->
+            </div>
+          </div>
+
+          <!-- Top Improvements -->
+          <div class="result-section">
+            <div class="result-label">Top Improvements in Final SQL</div>
+            <div class="improvements-list" id="improvementsList"></div>
+          </div>
+
+          <!-- Final SQL -->
+          <div class="final-sql-label">
+            <span class="trophy">🥇</span> Final Unified SQL
+          </div>
+          <div class="final-sql-block">
+            <pre><code class="language-sql" id="finalSql"></code></pre>
+            <button class="copy-btn" onclick="copySql('finalSql', this)">Copy</button>
+          </div>
+          <div class="final-explanation" id="finalExplanation"></div>
+
+          <div style="margin-top:24px;text-align:center;">
+            <button onclick="resetRace()" style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:12px 32px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;transition:all 0.2s;"
+              onmouseover="this.style.borderColor='var(--orange)';this.style.color='var(--orange)'"
+              onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+              🔄 Race Again
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <strong>QuerySense</strong> — Built for <a href="https://www.wemakedevs.org/hackathons/2fast2mcp" target="_blank">2 Fast 2 MCP</a> Hackathon · Powered by <a href="https://archestra.ai" target="_blank">Archestra.ai</a>
+  </div>
+</footer>
+
+<script>
+const ORCHESTRATOR_URL = window.location.origin.includes('localhost')
+  ? 'http://localhost:5000'
+  : window.location.origin;
+
+// ── Demo queries ──
+const DEMO_QUERIES = [
+  {
+    name: "N+1 Classic",
+    dialect: "postgresql",
+    sql: `SELECT *\nFROM orders o\nWHERE o.user_id IN (\n    SELECT id FROM users\n    WHERE created_at > '2024-01-01'\n    AND country = 'US'\n)\nORDER BY o.created_at DESC;`
+  },
+  {
+    name: "SELECT * Monster",
+    dialect: "bigquery",
+    sql: `SELECT *\nFROM events e\nJOIN users u ON e.user_id = u.id\nJOIN products p ON e.product_id = p.id\nJOIN sessions s ON e.session_id = s.id\nWHERE e.event_type = 'purchase'\nAND YEAR(e.created_at) = 2024\nORDER BY e.created_at DESC;`
+  },
+  {
+    name: "Missing Index Trap",
+    dialect: "postgresql",
+    sql: `SELECT\n    customer_id,\n    region,\n    product_category,\n    SUM(amount) AS total_revenue,\n    COUNT(*) AS transaction_count,\n    AVG(amount) AS avg_order_value\nFROM transactions\nWHERE status = 'completed'\nAND created_at BETWEEN '2024-01-01' AND '2024-12-31'\nGROUP BY customer_id, region, product_category\nHAVING SUM(amount) > 1000\nORDER BY total_revenue DESC;`
+  },
+  {
+    name: "SQL Injection",
+    dialect: "mysql",
+    sql: `SELECT id, username, email, password_hash, ssn,\n       credit_card_number, address, phone, salary\nFROM users\nWHERE username = '$username'\nAND status != 'banned'\nUNION SELECT * FROM admin_users WHERE '1'='1';`
+  },
+  {
+    name: "Cost Killer",
+    dialect: "snowflake",
+    sql: `SELECT DISTINCT\n    u.id, u.name, u.email, u.created_at, u.updated_at,\n    o.id AS order_id, o.total, o.status, o.created_at AS order_date,\n    p.name AS product_name, p.price, p.category, p.description,\n    r.rating, r.review_text, r.created_at AS review_date\nFROM users u, orders o, products p, reviews r\nWHERE u.id = o.user_id\nORDER BY u.created_at DESC;`
+  }
+];
+
+// ── State ──
+let raceActive = false;
+let raceTimer = null;
+let raceStartTime = null;
+let finishPositions = 0;
+let currentEventSource = null;
+
+// ── Init ──
+document.getElementById('sqlInput').addEventListener('input', function() {
+  document.getElementById('charCount').textContent = this.value.length + ' chars';
+});
+
+// ── Load demo query ──
+function loadDemo(index) {
+  const q = DEMO_QUERIES[index];
+  document.getElementById('sqlInput').value = q.sql;
+  document.getElementById('dialectSelect').value = q.dialect;
+  document.getElementById('charCount').textContent = q.sql.length + ' chars';
+}
+
+// ── Start race ──
+async function startRace() {
+  const query = document.getElementById('sqlInput').value.trim();
+  const dialect = document.getElementById('dialectSelect').value;
+
+  if (!query) {
+    document.getElementById('sqlInput').focus();
+    return;
+  }
+
+  raceActive = true;
+  finishPositions = 0;
+  raceStartTime = Date.now();
+
+  // Reset UI
+  document.getElementById('raceBtn').disabled = true;
+  showStatusBar('🏁 Race started! Agents are analyzing your SQL...');
+  showRaceSection();
+  resetAgentCards();
+  hideJudgeSection();
+
+  // Activate all 3 agent cards
+  ['performance', 'cost', 'security'].forEach(key => {
+    document.getElementById(`card-${key}`).className = 'agent-card active';
+  });
+
+  // Start timer
+  raceTimer = setInterval(() => {
+    const elapsed = ((Date.now() - raceStartTime) / 1000).toFixed(1);
+    document.getElementById('statusTimer').textContent = elapsed + 's';
+  }, 100);
+
+  // Connect to SSE stream
+  try {
+    const response = await fetch(`${ORCHESTRATOR_URL}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, dialect })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // Keep incomplete line
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const event = JSON.parse(line.slice(6));
+            handleEvent(event);
+          } catch (e) {
+            console.warn('SSE parse error:', e);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Race error:', err);
+    updateStatus(`❌ Error: ${err.message}. Is the orchestrator running?`);
+    document.getElementById('raceBtn').disabled = false;
+  }
+}
+
+// ── Handle SSE events ──
+function handleEvent(event) {
+  switch (event.event) {
+    case 'race_start':
+      updateStatus(event.message);
+      break;
+
+    case 'agent_done':
+      finishPositions++;
+      renderAgentResult(event.agent_key, event.result, event.elapsed, event.position);
+      updateStatus(`⚡ ${event.agent_label} finished (${event.elapsed}s) — position #${event.position}`);
+      break;
+
+    case 'agent_error':
+      document.getElementById(`card-${event.agent_key}`).className = 'agent-card done';
+      document.getElementById(`content-${event.agent_key}`).innerHTML =
+        `<div style="color:var(--red);font-size:12px;padding:16px 0;">❌ ${event.error}</div>`;
+      break;
+
+    case 'judging':
+      ['performance', 'cost', 'security'].forEach(k => {
+        document.getElementById(`card-${k}`).className = 'agent-card done';
+      });
+      updateStatus(event.message);
+      break;
+
+    case 'verdict':
+      clearInterval(raceTimer);
+      renderVerdict(event);
+      updateStatus(`🏆 Race complete in ${event.total_elapsed}s!`);
+      document.getElementById('raceBtn').disabled = false;
+      document.getElementById('statusBar').classList.remove('visible');
+      break;
+
+    case 'judge_error':
+      updateStatus(`⚠️ Judge error: ${event.error}`);
+      document.getElementById('raceBtn').disabled = false;
+      break;
+
+    case 'done':
+      if (raceTimer) clearInterval(raceTimer);
+      document.getElementById('raceBtn').disabled = false;
+      break;
+  }
+}
+
+// ── Render agent result card ──
+function renderAgentResult(key, result, elapsed, position) {
+  const card = document.getElementById(`card-${key}`);
+  card.className = 'agent-card done';
+
+  // Position badge
+  const posBadge = document.getElementById(`pos-${key}`);
+  const posMap = { 1: ['first', '1st 🥇'], 2: ['second', '2nd 🥈'], 3: ['third', '3rd 🥉'] };
+  if (posMap[position]) {
+    const [cls, label] = posMap[position];
+    posBadge.className = `position-badge ${cls}`;
+    posBadge.textContent = label;
+  }
+
+  const content = document.getElementById(`content-${key}`);
+  const severity = result.severity || 'unknown';
+
+  // Get key fields based on agent type
+  let issuesList = result.issues_found || result.expensive_operations || result.vulnerabilities || [];
+  let metricLabel = '', metricVal = '';
+  let rewrittenSql = result.rewritten_sql || '';
+
+  if (key === 'performance') {
+    metricLabel = 'Speedup'; metricVal = result.estimated_speedup || 'N/A';
+  } else if (key === 'cost') {
+    metricLabel = 'Cost Savings'; metricVal = result.estimated_cost_reduction_pct || 'N/A';
+  } else if (key === 'security') {
+    metricLabel = 'Risk Level'; metricVal = result.risk_level || 'N/A';
+  }
+
+  const issuesHtml = issuesList.slice(0, 3).map(i =>
+    `<li>${escHtml(i)}</li>`
+  ).join('');
+
+  content.innerHTML = `
+    <div class="stat-row">
+      <span class="severity-badge severity-${severity}">${severity}</span>
+      <span class="stat-chip"><span class="stat-val">${escHtml(metricVal)}</span> ${metricLabel}</span>
+      ${result.cost_usd ? `<span class="stat-chip">$<span class="stat-val">${result.cost_usd.toFixed(4)}</span></span>` : ''}
+    </div>
+
+    ${issuesHtml ? `
+      <div class="result-section">
+        <div class="result-label">Issues Found</div>
+        <ul class="issues-list">${issuesHtml}</ul>
+      </div>
+    ` : ''}
+
+    ${rewrittenSql ? `
+      <div class="result-section">
+        <div class="result-label">Rewritten SQL</div>
+        <div class="sql-block">
+          <pre><code class="language-sql" id="sql-${key}">${escHtml(rewrittenSql)}</code></pre>
+          <button class="copy-btn" onclick="copySql('sql-${key}', this)">Copy</button>
+        </div>
+      </div>
+    ` : ''}
+
+    <div class="elapsed-tag">⏱ Finished in ${elapsed}s</div>
+  `;
+
+  // Highlight SQL
+  const codeEl = document.getElementById(`sql-${key}`);
+  if (codeEl) hljs.highlightElement(codeEl);
+}
+
+// ── Render judge verdict ──
+function renderVerdict(event) {
+  const v = event.verdict;
+  const judgeSection = document.getElementById('judgeSection');
+  judgeSection.classList.add('visible');
+
+  // Header stats
+  document.getElementById('winnerName').textContent = v.winner || '—';
+  document.getElementById('statTime').textContent = event.total_elapsed + 's';
+  document.getElementById('statCost').textContent = event.total_cost_usd
+    ? '$' + event.total_cost_usd.toFixed(4)
+    : '—';
+  document.getElementById('statHealth').textContent = v.overall_query_health || '—';
+
+  // Verdict text
+  document.getElementById('verdictText').textContent = v.verdict || '—';
+
+  // Scores
+  const scoresGrid = document.getElementById('scoresGrid');
+  const scores = v.scores || {};
+  const agentKeys = {
+    'Performance Agent 🚀': 'performance',
+    'Cost Agent 💰': 'cost',
+    'Security Agent 🔒': 'security'
+  };
+  const agentColors = {
+    'Performance Agent 🚀': 'var(--orange)',
+    'Cost Agent 💰': 'var(--blue)',
+    'Security Agent 🔒': 'var(--red)'
+  };
+
+  scoresGrid.innerHTML = Object.entries(scores).map(([agentName, scoreData]) => {
+    const score = scoreData.score || 0;
+    const comment = scoreData.comment || '';
+    const isWinner = agentName === v.winner;
+    const color = agentColors[agentName] || 'var(--gold)';
+    return `
+      <div class="score-card ${isWinner ? 'winner-card' : ''}">
+        <div class="score-agent">${escHtml(agentName)}</div>
+        <div class="score-num" style="color:${color}">${score}</div>
+        <div class="score-bar">
+          <div class="score-fill" style="width:${score * 10}%;background:${color}"></div>
+        </div>
+        <div class="score-comment">${escHtml(comment)}</div>
+        ${isWinner ? '<div style="color:var(--gold);font-size:11px;margin-top:6px;">🏆 Winner</div>' : ''}
+      </div>
+    `;
+  }).join('');
+
+  // Highlight winner card in agent grid
+  const winnerKey = Object.entries(agentKeys).find(([name]) => name === v.winner)?.[1];
+  if (winnerKey) {
+    document.getElementById(`card-${winnerKey}`)?.classList.add('winner');
+  }
+
+  // Top improvements
+  const improvements = v.top_improvements || [];
+  document.getElementById('improvementsList').innerHTML = improvements.map((imp, i) =>
+    `<div class="improvement-item">
+      <span class="improvement-num">${i + 1}</span>
+      <span>${escHtml(imp)}</span>
+    </div>`
+  ).join('');
+
+  // Final SQL
+  const finalSqlEl = document.getElementById('finalSql');
+  finalSqlEl.textContent = v.final_sql || '';
+  hljs.highlightElement(finalSqlEl);
+
+  document.getElementById('finalExplanation').textContent = v.final_sql_explanation || '';
+
+  // Scroll to judge panel
+  setTimeout(() => {
+    judgeSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 200);
+}
+
+// ── UI helpers ──
+function showStatusBar(msg) {
+  document.getElementById('statusBar').classList.add('visible');
+  document.getElementById('statusMsg').textContent = msg;
+}
+
+function updateStatus(msg) {
+  document.getElementById('statusMsg').textContent = msg;
+}
+
+function showRaceSection() {
+  document.getElementById('raceSection').classList.add('visible');
+}
+
+function hideJudgeSection() {
+  document.getElementById('judgeSection').classList.remove('visible');
+}
+
+function resetAgentCards() {
+  finishPositions = 0;
+  ['performance', 'cost', 'security'].forEach(key => {
+    document.getElementById(`card-${key}`).className = 'agent-card';
+    document.getElementById(`content-${key}`).innerHTML = `
+      <div class="card-placeholder">
+        <div class="wait-icon">⏳</div>
+        <div>Waiting to race...</div>
+      </div>`;
+    const posBadge = document.getElementById(`pos-${key}`);
+    posBadge.className = 'position-badge';
+    posBadge.textContent = '';
+  });
+}
+
+function resetRace() {
+  if (raceTimer) clearInterval(raceTimer);
+  raceActive = false;
+  document.getElementById('raceBtn').disabled = false;
+  document.getElementById('statusBar').classList.remove('visible');
+  document.getElementById('statusTimer').textContent = '0.0s';
+  resetAgentCards();
+  hideJudgeSection();
+  document.getElementById('raceSection').classList.remove('visible');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function copySql(elementId, btn) {
+  const code = document.getElementById(elementId);
+  if (!code) return;
+  navigator.clipboard.writeText(code.textContent).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'Copy';
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+}
+
+function escHtml(str) {
+  if (typeof str !== 'string') str = String(str || '');
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Init hljs
+hljs.configure({ ignoreUnescapedHTML: true });
+</script>
+</body>
+</html>
