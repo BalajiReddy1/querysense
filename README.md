@@ -13,13 +13,15 @@ QuerySense is a **multi-agent SQL optimization platform** powered by Archestra. 
 
 | Agent | Model | Focus |
 |---|---|---|
-| 🚀 Performance Agent | GPT-4o | Speed, indexes, execution plans |
-| 💰 Cost Agent | Claude 3.5 Sonnet | Cloud spend, bytes scanned, compute |
-| 🔒 Security Agent | GPT-4o-mini | SQL injection, data exposure, compliance |
+| 🚀 Performance Agent | Llama 3.3 70B (Groq) | Speed, indexes, execution plans |
+| 💰 Cost Agent | Llama 3.3 70B (Groq) | Cloud spend, bytes scanned, compute |
+| 🔒 Security Agent | Llama 3.3 70B (Groq) | SQL injection, data exposure, compliance |
 
-A **Judge Agent** (GPT-4o) reviews all three reports, scores each agent, picks a winner, and synthesizes a **Final Unified SQL** combining the best ideas from all three.
+A **Judge Agent** (Llama 3.3 70B) reviews all three reports, scores each agent, picks a winner, and synthesizes a **Final Unified SQL** combining the best ideas from all three.
 
 Everything runs as MCP servers orchestrated through **Archestra**.
+
+**Total cost per race: $0.00** — runs entirely on Groq's free tier.
 
 ---
 
@@ -37,12 +39,12 @@ User pastes SQL query
 │    ┌─────────┼──────────┐                           │
 │    ▼         ▼          ▼   (parallel execution)    │
 │  [🚀 Perf]  [💰 Cost] [🔒 Sec]                     │
-│  GPT-4o   Claude 3.5  GPT-4o-mini                  │
+│  Llama 3.3  Llama 3.3  Llama 3.3                   │
 │    │         │          │                           │
 │    └─────────┴──────────┘                           │
 │              │                                      │
 │              ▼                                      │
-│         [⚖️ Judge] ← GPT-4o                        │
+│         [⚖️ Judge] ← Llama 3.3                     │
 │    Picks winner + Final SQL                         │
 └─────────────────────────────────────────────────────┘
          │
@@ -56,22 +58,64 @@ User pastes SQL query
 
 ### Prerequisites
 - Python 3.11+
-- OpenAI API key
-- Anthropic API key
-- Docker (for Archestra)
+- Groq API key (free) — get one at https://console.groq.com
+- Docker (for Archestra, optional)
 
 ### 1. Clone & Setup
 
 ```bash
-git clone https://github.com/yourusername/querysense
+git clone https://github.com/BalajiReddy1/querysense
 cd querysense
 
-# Copy and fill in your API keys
 cp .env.example .env
-nano .env
+# Edit .env and add your GROQ_API_KEY
 ```
 
-### 2. Start Archestra
+`.env` should look like:
+```
+GROQ_API_KEY=your_groq_api_key_here
+
+PERFORMANCE_AGENT_PORT=8001
+COST_AGENT_PORT=8002
+SECURITY_AGENT_PORT=8003
+JUDGE_AGENT_PORT=8004
+ORCHESTRATOR_PORT=5000
+```
+
+### 2. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Start all agents
+
+Open 5 terminals and run one command in each:
+
+```bash
+# Terminal 1
+cd mcp_servers/performance_agent && python server.py
+
+# Terminal 2
+cd mcp_servers/cost_agent && python server.py
+
+# Terminal 3
+cd mcp_servers/security_agent && python server.py
+
+# Terminal 4
+cd mcp_servers/judge_agent && python server.py
+
+# Terminal 5 — run from project ROOT
+uvicorn orchestrator.main:app --host 0.0.0.0 --port 5000 --reload
+```
+
+### 4. Open the UI
+
+```
+http://localhost:5000
+```
+
+### Optional: Start Archestra
 
 ```bash
 docker pull archestra/platform:latest
@@ -83,31 +127,13 @@ docker run -p 9000:9000 -p 3000:3000 \
   archestra/platform
 ```
 
-### 3. Start QuerySense
-
-```bash
-chmod +x start.sh
-./start.sh
-```
-
-### 4. Open the UI
-
-```
-http://localhost:5000
-```
-
-### Alternative: Docker Compose
-
-```bash
-cp .env.example .env  # fill in API keys
-docker-compose up --build
-```
+Then follow `ARCHESTRA_SETUP.md` to register all 4 MCP servers.
 
 ---
 
-## 🎮 Demo
+## 🎮 Demo Queries
 
-Open the UI and click any demo query button:
+Click any demo button in the UI:
 
 - **N+1 Classic** — Subquery causing repeated table scans
 - **SELECT * Monster** — Multiple joins with wildcard selects
@@ -115,13 +141,11 @@ Open the UI and click any demo query button:
 - **SQL Injection** — Classic injection vulnerability
 - **Cost Killer** — Cartesian join scanning everything
 
-Watch all 3 agents analyze it simultaneously and the Judge declare a winner!
-
 ---
 
 ## 🔌 MCP Tools
 
-Each agent exposes one MCP tool:
+Each agent exposes one MCP tool via SSE transport:
 
 | Server | Tool | Port |
 |---|---|---|
@@ -139,18 +163,17 @@ All registered in Archestra's Private MCP Registry.
 ```
 querysense/
 ├── mcp_servers/
-│   ├── performance_agent/server.py   # FastMCP + GPT-4o
-│   ├── cost_agent/server.py          # FastMCP + Claude 3.5
-│   ├── security_agent/server.py      # FastMCP + GPT-4o-mini
-│   └── judge_agent/server.py         # FastMCP + GPT-4o
+│   ├── performance_agent/server.py   # FastMCP + Llama 3.3 via Groq
+│   ├── cost_agent/server.py          # FastMCP + Llama 3.3 via Groq
+│   ├── security_agent/server.py      # FastMCP + Llama 3.3 via Groq
+│   └── judge_agent/server.py         # FastMCP + Llama 3.3 via Groq
 ├── orchestrator/
 │   └── main.py                       # FastAPI + SSE streaming
 ├── ui/
 │   └── index.html                    # Single-file race UI
 ├── docker-compose.yml
 ├── requirements.txt
-├── start.sh                          # One-command startup
-├── ARCHESTRA_SETUP.md                # Archestra registration guide
+├── ARCHESTRA_SETUP.md
 └── .env.example
 ```
 
@@ -166,12 +189,12 @@ PostgreSQL, MySQL, BigQuery, Snowflake, Redshift, SQLite, Databricks
 
 QuerySense uses Archestra as its MCP control plane:
 
-- **Multi-LLM orchestration** — 3 different models (OpenAI, Anthropic) managed centrally
+- **Multi-agent orchestration** — 4 MCP servers managed and governed centrally
 - **Cost tracking** — Every agent call tracked, total race cost displayed
 - **Security isolation** — Each agent runs isolated, preventing prompt injection
-- **Private MCP Registry** — All 4 servers registered and governed centrally
+- **Private MCP Registry** — All 4 servers registered and shared org-wide
 - **Observability** — Full OTEL traces of the entire race
-- **Built-in Chat** — QuerySense also works natively in Archestra's chat UI
+- **Built-in Chat** — QuerySense also works natively inside Archestra's chat UI
 
 ---
 
@@ -179,8 +202,7 @@ QuerySense uses Archestra as its MCP control plane:
 
 Built for **2 Fast 2 MCP** by [WeMakeDevs](https://wemakedevs.org) × [Archestra.ai](https://archestra.ai)
 
-Dates: February 8–15, 2025
-
+Dates: February 8–15, 2025 
 
 ---
 
