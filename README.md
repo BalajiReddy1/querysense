@@ -181,7 +181,6 @@ Built for **2 Fast 2 MCP** by [WeMakeDevs](https://wemakedevs.org) × [Archestra
 
 Dates: February 8–15, 2025
 
-Prize pool: $10,000+
 
 ---
 
